@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ragbox</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='3' y='6' width='26' height='20' rx='4' fill='%234f46e5'/><rect x='8' y='11' width='16' height='3' rx='1.5' fill='white'/><rect x='8' y='17' width='10' height='3' rx='1.5' fill='white'/></svg>">
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f1f3f6; --border: #e3e6eb; --text: #1b1f24; --muted: #667080;
+  --accent: #4f46e5; --accent-ink: #ffffff; --accent-soft: #eef0ff;
+  --ok: #15803d; --ok-soft: #e7f6ec; --warn: #b45309; --warn-soft: #fdf3e2; --err: #c62828; --err-soft: #fdecec;
+  --info: #1d4ed8; --info-soft: #e8efff; --skip: #6b7280; --skip-soft: #eef0f2;
+  --cool: #0e7490; --cool-soft: #e2f4f8; --neutral: #4f46e5; --neutral-soft: #eef0ff;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-2: #1e222b; --border: #2a2f3a; --text: #e6e8ec; --muted: #9099a8;
+    --accent: #818cf8; --accent-ink: #0f1115; --accent-soft: #23264a;
+    --ok: #4ade80; --ok-soft: #14301f; --warn: #fbbf24; --warn-soft: #33270f; --err: #f87171; --err-soft: #3a1717;
+    --info: #93c5fd; --info-soft: #172846; --skip: #a1a1aa; --skip-soft: #25272c;
+    --cool: #67e8f9; --cool-soft: #12313a; --neutral: #a5b4fc; --neutral-soft: #23264a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+.topbar { display: flex; align-items: center; gap: 16px; padding: 12px 0; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+.pills { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); font-size: 12px; white-space: nowrap; max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--skip); flex: none; }
+.dot.ok { background: var(--ok); } .dot.err { background: var(--err); } .dot.warn { background: var(--warn); }
+nav.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+nav.tabs button { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); padding: 10px 14px; font: inherit; font-weight: 500; cursor: pointer; white-space: nowrap; }
+nav.tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+main.wrap { padding-top: 20px; padding-bottom: 48px; }
+
+/* Pipeline: discovered -> cooling down -> queued -> embedding -> indexed, with error/skipped outcomes */
+.pipeline { margin-bottom: 16px; padding: 16px; }
+.flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(150px, .9fr); gap: 22px; align-items: stretch; }
+.stage { --c: var(--neutral); --cs: var(--neutral-soft); position: relative; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 12px 10px; min-width: 0;
+  display: flex; flex-direction: column; gap: 4px; transition: border-color .15s, box-shadow .15s; }
+.stage:hover { border-color: var(--c); }
+.stage.selected { border-color: var(--c); box-shadow: 0 0 0 3px var(--cs); }
+.stage.main:not(:nth-child(5))::after { content: ''; position: absolute; right: -17px; top: 50%; width: 12px; height: 12px; margin-top: -6px;
+  background: var(--muted); opacity: .45; clip-path: polygon(0 0, 100% 50%, 0 100%, 30% 50%); }
+.stage-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 550; color: var(--muted); }
+.stage-icon { width: 26px; height: 26px; border-radius: 8px; background: var(--cs); color: var(--c); display: grid; place-items: center; flex: none; }
+.stage-icon svg { width: 15px; height: 15px; }
+.stage-count { font-size: 26px; font-weight: 680; font-variant-numeric: tabular-nums; line-height: 1.15; letter-spacing: -0.02em; }
+.stage.zero .stage-count { color: var(--muted); opacity: .6; }
+.stage-sub { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stage-sub.bad { color: var(--err); }
+.stage.live .stage-icon { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 var(--cs); } 50% { box-shadow: 0 0 0 5px var(--cs); } }
+.outcomes { display: grid; grid-template-rows: 1fr 1fr; gap: 10px; padding-left: 22px; border-left: 1px dashed var(--border); }
+.outcomes .stage { padding: 8px 10px; flex-direction: row; align-items: center; gap: 10px; }
+.outcomes .stage-count { font-size: 18px; margin-left: auto; }
+.outcomes .stage-top { color: var(--text); }
+.s-cooldown { --c: var(--cool); --cs: var(--cool-soft); }
+.s-queued { --c: var(--warn); --cs: var(--warn-soft); }
+.s-processing { --c: var(--info); --cs: var(--info-soft); }
+.s-indexed { --c: var(--ok); --cs: var(--ok-soft); }
+.s-error { --c: var(--err); --cs: var(--err-soft); }
+.s-skipped { --c: var(--skip); --cs: var(--skip-soft); }
+.flowbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--panel-2); margin-top: 16px; }
+.flowbar > span { height: 100%; transition: width .4s; }
+.flowbar > span + span { border-left: 2px solid var(--panel); }
+.flow-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.bg-indexed { background: var(--ok); } .bg-processing { background: var(--info); } .bg-queued { background: var(--warn); }
+.bg-cooldown { background: var(--cool); } .bg-error { background: var(--err); } .bg-skipped { background: var(--skip); opacity: .6; }
+@media (max-width: 980px) {
+  .flow { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .stage.main::after { display: none; }
+  .outcomes { grid-column: 1 / -1; grid-template-rows: none; grid-template-columns: 1fr 1fr; padding-left: 0; border-left: none; }
+}
+@media (max-width: 560px) {
+  .pipeline { padding: 12px; }
+  .flow { grid-template-columns: 1fr; gap: 6px; }
+  .stage.main { flex-direction: row; align-items: center; gap: 10px; padding: 7px 10px; }
+  .stage.main .stage-count { order: 3; margin-left: auto; font-size: 18px; }
+  .stage.main .stage-sub { display: none; }
+  .outcomes { gap: 6px; }
+  #fileFilter { order: 10; flex-basis: 100%; width: auto !important; }
+  .opt { display: none; }
+  th, td { padding: 8px 6px; }
+  #filesHead th { width: auto !important; }
+  .minibar { width: 64px; }
+  .name-cell .small, [data-chunks] { display: none; }
+}
+
+/* Folders / List toggle */
+.seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+.seg button { border: none; background: none; color: var(--muted); font: inherit; font-size: 12.5px; padding: 4px 10px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.seg button svg { width: 14px; height: 14px; }
+.seg button.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.filter-pill { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 12px; background: var(--accent-soft); border: 1px solid var(--accent); }
+.filter-pill button { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px; }
+.spacer { flex: 1; }
+
+/* Folder tree */
+tr.folder { cursor: pointer; }
+tr.folder:hover td, tr.file:hover td { background: var(--panel-2); }
+.name-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.chev { width: 14px; height: 14px; flex: none; color: var(--muted); transition: transform .15s; }
+tr.folder.open .chev { transform: rotate(90deg); }
+.ficon { width: 16px; height: 16px; flex: none; color: var(--muted); }
+tr.folder .ficon { color: var(--accent); }
+.fname { font-weight: 550; overflow-wrap: anywhere; }
+tr.file .fname { font-weight: 400; font-family: var(--mono); font-size: 12.5px; }
+.minibar { display: flex; width: 110px; height: 6px; border-radius: 3px; overflow: hidden; background: var(--panel-2); }
+.minibar > span + span { border-left: 1px solid var(--panel); }
+.agg { display: flex; flex-direction: column; gap: 4px; }
+.agg-text { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.agg-text .e { color: var(--err); font-weight: 600; }
+.agg-text .p { color: var(--info); font-weight: 600; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+.panel-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.panel-head h2 { font-size: 15px; margin: 0; margin-right: auto; }
+.panel-body { padding: 14px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--panel-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--err); }
+.btn.small { padding: 3px 8px; font-size: 12px; }
+.btn:disabled { opacity: .5; cursor: default; }
+input, select, textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+textarea { font-family: var(--mono); font-size: 12px; width: 100%; resize: vertical; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--border); background: var(--panel); color: var(--muted); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.chip.active { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 500; background: var(--panel-2); position: sticky; top: 0; }
+tr:last-child td { border-bottom: none; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.path { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+.err-msg { color: var(--err); font-size: 12px; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.badge.indexed { background: var(--ok-soft); color: var(--ok); }
+.badge.pending, .badge.queued { background: var(--warn-soft); color: var(--warn); }
+.badge.cooldown { background: var(--cool-soft); color: var(--cool); }
+.badge.processing { background: var(--info-soft); color: var(--info); }
+.badge.error { background: var(--err-soft); color: var(--err); }
+.badge.skipped { background: var(--skip-soft); color: var(--skip); }
+.table-wrap { overflow-x: auto; }
+.empty { padding: 32px; text-align: center; color: var(--muted); }
+.log { font-family: var(--mono); font-size: 12px; max-height: 70vh; overflow-y: auto; }
+.log-row { display: grid; grid-template-columns: 78px 48px 1fr; gap: 10px; padding: 5px 14px; border-bottom: 1px solid var(--border); }
+.log-row .lvl-warn { color: var(--warn); } .log-row .lvl-error { color: var(--err); } .log-row .lvl-info { color: var(--muted); }
+.log-row .lpath { color: var(--accent); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+.result { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.result:last-child { border-bottom: none; }
+.result-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
+.result pre, pre.snippet { white-space: pre-wrap; word-break: break-word; margin: 0; font-family: var(--mono); font-size: 12px; background: var(--panel-2); padding: 10px; border-radius: 8px; max-height: 260px; overflow: auto; }
+.field { display: grid; grid-template-columns: 240px 1fr; gap: 6px 16px; padding: 12px 0; border-bottom: 1px solid var(--border); align-items: start; }
+.field:last-child { border-bottom: none; }
+.field label { font-weight: 550; }
+.field .help { color: var(--muted); font-size: 12px; margin-top: 2px; font-weight: 400; }
+.field input[type=text], .field input[type=number], .field input[type=password], .field select { width: 100%; max-width: 420px; }
+.field .meta { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+.field .meta a { color: var(--accent); cursor: pointer; }
+@media (max-width: 700px) { .field { grid-template-columns: 1fr; } .pills { margin-left: 0; } }
+.settings-group h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 20px 0 4px; }
+.settings-group:first-child h3 { margin-top: 0; }
+.savebar { display: flex; gap: 10px; align-items: center; position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--border); padding: 12px 14px; border-radius: 0 0 var(--radius) var(--radius); }
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20; max-width: 90vw; }
+.toast.show { opacity: 1; }
+code { font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+.formats { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.format { border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.format b { display: block; margin-bottom: 4px; }
+.ext { display: inline-block; font-family: var(--mono); font-size: 11.5px; padding: 0 5px; margin: 2px 3px 0 0; border-radius: 4px; background: var(--panel-2); }
+.ext.off { text-decoration: line-through; color: var(--muted); }
+dialog { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: var(--text); width: min(900px, 94vw); max-height: 86vh; padding: 0; }
+dialog::backdrop { background: rgba(0,0,0,.4); }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="6" width="26" height="20" rx="4" fill="var(--accent)"/><rect x="8" y="11" width="16" height="3" rx="1.5" fill="var(--panel)"/><rect x="8" y="17" width="10" height="3" rx="1.5" fill="var(--panel)"/></svg>
+        ragbox
+      </div>
+      <div class="pills">
+        <span class="pill" id="pillProvider"><span class="dot"></span><span>Embeddings</span></span>
+        <span class="pill" id="pillWatcher"><span class="dot"></span><span>Watcher</span></span>
+        <span class="pill" id="pillWorker"><span class="dot"></span><span>Worker</span></span>
+        <button class="btn small" id="btnPause">Pause</button>
+        <button class="btn small" id="btnRescan">Rescan</button>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="files" class="active">Files</button>
+      <button data-tab="activity">Activity</button>
+      <button data-tab="search">Search</button>
+      <button data-tab="settings">Settings</button>
+      <button data-tab="mcp">MCP</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section data-panel="files">
+    <div class="panel pipeline">
+      <div class="flow" id="flow"></div>
+      <div class="flowbar" id="flowbar"></div>
+      <div class="flow-foot"><span id="flowSummary"></span><span id="flowMeta"></span></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <div class="seg" id="viewToggle" role="group" aria-label="View">
+          <button data-view="tree"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Folders</button>
+          <button data-view="list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>List</button>
+        </div>
+        <input type="search" id="fileFilter" placeholder="Filter by path…" style="width: 220px">
+        <span id="filterPill"></span>
+        <span class="spacer"></span>
+        <button class="btn small" id="btnRetryErrors">Retry errors</button>
+        <button class="btn small danger" id="btnReindexAll">Re-index all</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead id="filesHead"></thead>
+          <tbody id="filesBody"></tbody>
+        </table>
+      </div>
+      <div class="panel-body small muted" id="filesFooter"></div>
+    </div>
+  </section>
+
+  <section data-panel="activity" class="hidden">
+    <div class="panel">
+      <div class="panel-head"><h2>Activity</h2><span class="small muted">Most recent first · not persisted across restarts</span></div>
+      <div class="log" id="activityLog"></div>
+    </div>
+  </section>
+
+  <section data-panel="search" class="hidden">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Test search</h2>
+      </div>
+      <div class="panel-body">
+        <form id="searchForm" style="display:flex; gap:8px; flex-wrap:wrap">
+          <input type="search" id="searchQuery" placeholder="Ask something about your documents…" style="flex:1; min-width:240px" required>
+          <input type="text" id="searchPrefix" placeholder="Path prefix (optional)" style="width:200px">
+          <input type="number" id="searchLimit" min="1" max="50" placeholder="Limit" style="width:80px">
+          <button class="btn primary" type="submit">Search</button>
+        </form>
+        <p class="small muted" style="margin:8px 0 0">Runs the same hybrid search the MCP <code>search</code> tool uses.</p>
+      </div>
+      <div id="searchResults"></div>
+    </div>
+  </section>
+
+  <section data-panel="settings" class="hidden">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Settings</h2>
+        <span class="small muted">Stored in the database; values not set here come from <code>RAGBOX_*</code> environment variables or defaults.</span>
+      </div>
+      <form id="settingsForm">
+        <div class="panel-body" id="settingsFields"></div>
+        <div class="savebar">
+          <button class="btn primary" type="submit">Save changes</button>
+          <button class="btn" type="button" id="btnTestProvider">Test embedding provider</button>
+          <span class="small muted" id="settingsMsg"></span>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section data-panel="mcp" class="hidden">
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><h2>Connect an MCP client</h2></div>
+        <div class="panel-body">
+          <p>ragbox exposes a stateless <b>Streamable HTTP</b> MCP server with a single <code>search</code> tool.</p>
+          <p class="small muted" style="margin-bottom:4px">Endpoint</p>
+          <pre class="snippet" id="mcpUrl"></pre>
+          <p class="small muted" style="margin:14px 0 4px">Claude Code</p>
+          <pre class="snippet" id="mcpClaude"></pre>
+          <p class="small muted" style="margin:14px 0 4px">JSON config (Cursor, VS Code, Claude Desktop via mcp-remote, …)</p>
+          <pre class="snippet" id="mcpJson"></pre>
+          <p class="small muted" id="mcpAuthNote"></p>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Supported formats</h2><span class="small muted">Struck-through extensions are disabled in settings</span></div>
+        <div class="panel-body"><div class="formats" id="formats"></div></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="chunksDialog">
+  <div class="panel-head"><h2 id="chunksTitle" class="path"></h2><button class="btn small" onclick="this.closest('dialog').close()">Close</button></div>
+  <div id="chunksBody" style="overflow:auto; max-height: calc(86vh - 60px)"></div>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const state = {
+  tab: 'files', view: 'tree', status: '', q: '', limit: 100, tree: {}, expanded: new Set(), collapsed: new Set(),
+  lastActivityId: 0, activity: [], settings: null, defaults: null, overridden: [], status_: null,
+};
+
+async function api(path, opts = {}) {
+  const res = await fetch('api' + path, { headers: { 'content-type': 'application/json' }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function fmtSize(n) {
+  if (n == null) return '';
+  const u = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return `${n < 10 && i ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
+}
+
+function fmtAgo(d) {
+  if (!d) return '';
+  const s = Math.round((Date.now() - new Date(d).getTime()) / 1000);
+  if (s < -1) return `in ${fmtDur(-s)}`;
+  if (s < 5) return 'just now';
+  return `${fmtDur(s)} ago`;
+}
+function fmtDur(s) {
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.round(s / 60)}m`;
+  if (s < 86400) return `${Math.round(s / 3600)}h`;
+  return `${Math.round(s / 86400)}d`;
+}
+
+// ---------- Tabs ----------
+$('#tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-tab]');
+  if (b) setTab(b.dataset.tab);
+});
+function setTab(tab) {
+  state.tab = tab;
+  for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('active', b.dataset.tab === tab);
+  for (const p of document.querySelectorAll('[data-panel]')) p.classList.toggle('hidden', p.dataset.panel !== tab);
+  try { localStorage.setItem('ragbox.tab', tab); } catch {}
+  const fail = (err) => toast(`Failed to load ${tab}: ${err.message}`);
+  if (tab === 'files') loadFiles().catch(fail);
+  if (tab === 'activity') renderActivity();
+  if (tab === 'settings') loadSettings().catch(fail);
+  if (tab === 'mcp') loadMcp().catch(fail);
+}
+
+// ---------- Status ----------
+function setPill(id, cls, text, title) {
+  const el = $(id);
+  el.querySelector('.dot').className = 'dot ' + cls;
+  el.querySelector('span:last-child').textContent = text;
+  el.title = title || text;
+}
+
+async function loadStatus() {
+  try {
+    const s = await api('/status');
+    state.status_ = s;
+    const p = s.provider;
+    setPill('#pillProvider', p.ok ? 'ok' : 'err', `${p.model}${p.ok ? ` · ${p.dims}d` : ' · unavailable'}`, p.ok ? `${p.kind} at ${p.url}` : p.error);
+    const w = s.watcher;
+    setPill('#pillWatcher', w.error ? 'warn' : w.running ? 'ok' : 'err', w.running ? `Watching (${w.backend})` : 'Watcher stopped', w.error || '');
+    const k = s.worker;
+    const busy = k.active.length;
+    const workerText = k.paused ? 'Paused' : !k.ready ? 'Preparing index' : busy ? `Indexing ${busy}/${k.concurrency}` : s.scan.running ? 'Scanning' : 'Idle';
+    setPill('#pillWorker', k.paused ? 'warn' : busy || s.scan.running ? 'ok' : '', workerText, k.active.join('\n'));
+    $('#btnPause').textContent = k.paused ? 'Resume' : 'Pause';
+    renderPipeline(s);
+  } catch (err) {
+    setPill('#pillWorker', 'err', 'Server unreachable', err.message);
+  }
+}
+
+// ---------- Pipeline ----------
+const ICON = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const ICONS = {
+  all: ICON('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+  cooldown: ICON('<path d="M6 2h12M6 22h12M7 2c0 5 10 5 10 10S7 17 7 22M17 2c0 5-10 5-10 10s10 5 10 10"/>'),
+  queued: ICON('<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'),
+  processing: ICON('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>'),
+  indexed: ICON('<path d="M20 6 9 17l-5-5"/>'),
+  error: ICON('<path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'),
+  skipped: ICON('<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>'),
+};
+const FOLDER_ICON = '<svg class="ficon" viewBox="0 0 24 24" fill="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+const FILE_ICON = '<svg class="ficon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5"/></svg>';
+const CHEVRON = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
+
+const STAGE_LABELS = { '': 'All files', cooldown: 'Cooling down', queued: 'Queued', processing: 'Embedding', indexed: 'Indexed', error: 'Errors', skipped: 'Skipped' };
+// Order used by the progress bars, most "done" first.
+const SEGMENTS = ['indexed', 'processing', 'queued', 'cooldown', 'skipped', 'error'];
+
+function renderPipeline(s) {
+  const f = s.files;
+  const counts = { '': s.totalFiles, cooldown: s.pipeline.cooldown, queued: s.pipeline.queued, processing: f.processing, indexed: f.indexed, error: f.error, skipped: f.skipped };
+  const k = s.worker;
+  const names = k.active.map((p) => p.split('/').pop());
+  const sub = {
+    '': s.scan.running ? 'scanning folder…' : s.scan.lastFinishedAt ? `scanned ${fmtAgo(s.scan.lastFinishedAt)}` : 'discovered',
+    cooldown: `${s.cooldownSeconds}s quiet after edits`,
+    queued: k.paused ? 'paused' : 'waiting for a worker',
+    processing: !s.provider.ok ? 'embeddings unavailable' : k.paused ? 'paused' : names.length ? names.join(', ') : 'idle',
+    indexed: `${s.chunks.toLocaleString()} chunks`,
+    error: 'failed to parse',
+    skipped: 'empty or too large',
+  };
+  const stage = (key, cls, extra = '') => `
+    <button class="stage ${cls} s-${key || 'all'} ${counts[key] ? '' : 'zero'} ${state.status === key ? 'selected' : ''} ${extra}"
+      data-status="${key}" title="${esc(sub[key])}">
+      <div class="stage-top"><span class="stage-icon">${ICONS[key || 'all']}</span><span>${STAGE_LABELS[key]}</span></div>
+      <div class="stage-count">${counts[key].toLocaleString()}</div>
+      ${cls === 'main' ? `<div class="stage-sub ${key === 'processing' && !s.provider.ok ? 'bad' : ''}">${esc(sub[key])}</div>` : ''}
+    </button>`;
+  $('#flow').innerHTML =
+    stage('', 'main') + stage('cooldown', 'main') + stage('queued', 'main') +
+    stage('processing', 'main', f.processing && s.provider.ok && !k.paused ? 'live' : '') + stage('indexed', 'main') +
+    `<div class="outcomes">${stage('error', 'side')}${stage('skipped', 'side')}</div>`;
+
+  const total = s.totalFiles || 1;
+  $('#flowbar').innerHTML = SEGMENTS.filter((key) => counts[key])
+    .map((key) => `<span class="bg-${key}" style="width:${(counts[key] / total) * 100}%" title="${STAGE_LABELS[key]}: ${counts[key]}"></span>`).join('');
+  const pct = s.totalFiles ? Math.floor((f.indexed / s.totalFiles) * 100) : 0;
+  const remaining = counts.cooldown + counts.queued + counts.processing;
+  $('#flowSummary').textContent = s.totalFiles
+    ? `${f.indexed.toLocaleString()} of ${s.totalFiles.toLocaleString()} files indexed (${pct}%)${remaining ? ` · ${remaining.toLocaleString()} in progress` : ''}`
+    : 'No supported files found yet';
+  $('#flowMeta').textContent = s.pipeline.lastIndexedAt ? `last indexed ${fmtAgo(s.pipeline.lastIndexedAt)}` : '';
+}
+
+$('#flow').addEventListener('click', (e) => {
+  const st = e.target.closest('.stage');
+  if (!st) return;
+  // Clicking the selected stage again clears the filter.
+  setFilterStatus(state.status === st.dataset.status ? '' : st.dataset.status);
+});
+
+function setFilterStatus(status) {
+  state.status = status;
+  state.limit = 100;
+  state.collapsed.clear();
+  if (state.status_) renderPipeline(state.status_);
+  renderFilterPill();
+  loadFiles();
+}
+
+function renderFilterPill() {
+  $('#filterPill').innerHTML = state.status
+    ? `<span class="filter-pill">${esc(STAGE_LABELS[state.status])}<button title="Clear filter" aria-label="Clear filter">×</button></span>` : '';
+}
+$('#filterPill').addEventListener('click', (e) => { if (e.target.closest('button')) setFilterStatus(''); });
+
+$('#btnPause').onclick = async () => {
+  const paused = $('#btnPause').textContent === 'Pause';
+  await api('/pause', { method: 'POST', body: { paused } });
+  loadStatus();
+};
+$('#btnRescan').onclick = async () => {
+  await api('/rescan', { method: 'POST' });
+  toast('Rescan started');
+  setTimeout(loadStatus, 300);
+};
+
+// ---------- Files ----------
+let filterTimer;
+$('#fileFilter').addEventListener('input', (e) => {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => { state.q = e.target.value.trim(); state.limit = 100; state.collapsed.clear(); loadFiles(); }, 250);
+});
+
+$('#viewToggle').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-view]');
+  if (!b || b.dataset.view === state.view) return;
+  state.view = b.dataset.view;
+  try { localStorage.setItem('ragbox.view', state.view); } catch {}
+  renderViewToggle();
+  loadFiles();
+});
+function renderViewToggle() {
+  for (const b of document.querySelectorAll('#viewToggle button')) b.classList.toggle('active', b.dataset.view === state.view);
+}
+
+/** A pending file is either cooling down (due later) or queued (due now). */
+function fileStage(f) {
+  if (f.status !== 'pending') return f.status;
+  return new Date(f.due_at) > Date.now() ? 'cooldown' : 'queued';
+}
+const BADGE_TEXT = { cooldown: 'cooling down', queued: 'queued', processing: 'embedding', indexed: 'indexed', error: 'error', skipped: 'skipped' };
+
+function fileCells(f) {
+  const stage = fileStage(f);
+  const due = stage === 'cooldown' ? `<div class="small muted">${fmtAgo(f.due_at)}</div>` : '';
+  const took = f.duration_ms != null && f.status === 'indexed'
+    ? ` · ${f.duration_ms < 1000 ? f.duration_ms + ' ms' : (f.duration_ms / 1000).toFixed(1) + ' s'}` : '';
+  return {
+    status: `<span class="badge ${stage}">${BADGE_TEXT[stage]}</span>${due}`,
+    error: f.error ? `<div class="err-msg">${esc(f.error)}</div>` : '',
+    chunks: f.chunk_count || '',
+    size: fmtSize(f.size),
+    updated: `<span title="${esc(f.updated_at)}">${fmtAgo(f.indexed_at || f.updated_at)}${took}</span>`,
+    actions: `${f.chunk_count ? `<button class="btn small" data-chunks="${esc(f.path)}">Chunks</button>` : ''}
+      <button class="btn small" data-reindex="${esc(f.path)}">Re-index</button>`,
+  };
+}
+
+function emptyRow(cols, total) {
+  const msg = total === 0 && !state.status && !state.q
+    ? 'No files found yet. Supported files in the documents folder will appear here.' : 'No files match this filter.';
+  return `<tr><td colspan="${cols}" class="empty">${msg}</td></tr>`;
+}
+
+function loadFiles() {
+  return state.view === 'tree' ? loadTree() : loadList();
+}
+
+async function loadList() {
+  const params = new URLSearchParams({ limit: state.limit });
+  if (state.status) params.set('status', state.status);
+  if (state.q) params.set('q', state.q);
+  const { total, files } = await api('/files?' + params);
+  if (state.view !== 'list') return;
+  $('#filesHead').innerHTML = '<tr><th style="width:120px">Status</th><th>Path</th><th class="opt">Parser</th><th class="num">Chunks</th><th class="num opt">Size</th><th class="opt">Updated</th><th></th></tr>';
+  $('#filesBody').innerHTML = !files.length ? emptyRow(7, total) : files.map((f) => {
+    const c = fileCells(f);
+    return `<tr class="file">
+      <td>${c.status}</td>
+      <td><div class="path">${esc(f.path)}</div>${c.error}</td>
+      <td class="small muted opt">${esc(f.parser || '')}</td>
+      <td class="num">${c.chunks}</td>
+      <td class="num small opt">${c.size}</td>
+      <td class="small muted opt">${c.updated}</td>
+      <td style="white-space:nowrap; text-align:right">${c.actions}</td></tr>`;
+  }).join('');
+  $('#filesFooter').innerHTML = `Showing ${files.length.toLocaleString()} of ${total.toLocaleString()}` +
+    (files.length < total ? ` · <a href="#" id="loadMore">show more</a>` : '');
+  const more = $('#loadMore');
+  if (more) more.onclick = (e) => { e.preventDefault(); state.limit += 200; loadFiles(); };
+}
+
+// Folders view: folders are loaded level by level for every expanded folder.
+// Without a filter, folders start collapsed; with one, they start expanded so
+// matches are visible right away.
+const filterActive = () => !!(state.status || state.q);
+const isOpen = (dir) => filterActive() ? !state.collapsed.has(dir) : state.expanded.has(dir);
+
+async function loadTree() {
+  const filter = new URLSearchParams();
+  if (state.status) filter.set('status', state.status);
+  if (state.q) filter.set('q', state.q);
+  const data = {};
+  let pending = [''];
+  while (pending.length && Object.keys(data).length < 300) {
+    const params = new URLSearchParams(filter);
+    for (const d of pending) params.append('dir', d);
+    const { dirs } = await api('/tree?' + params);
+    Object.assign(data, dirs);
+    pending = Object.values(dirs).flatMap((n) => n.folders.map((f) => f.path)).filter((p) => isOpen(p) && !data[p]);
+  }
+  if (state.view !== 'tree') return;
+  state.tree = data;
+  renderTree();
+}
+
+function minibar(f) {
+  return `<div class="minibar">${SEGMENTS.filter((k) => f[k])
+    .map((k) => `<span class="bg-${k}" style="width:${(f[k] / f.files) * 100}%"></span>`).join('')}</div>`;
+}
+
+function folderSummary(f) {
+  const parts = [`${f.indexed}/${f.files} indexed`];
+  const active = f.processing + f.queued + f.cooldown;
+  if (active) parts.push(`<span class="p">${active} in progress</span>`);
+  if (f.error) parts.push(`<span class="e">${f.error} error${f.error === 1 ? '' : 's'}</span>`);
+  return parts.join(' · ');
+}
+
+function treeRows(dir, depth) {
+  const node = state.tree[dir];
+  if (!node) return '';
+  const pad = (d) => `style="padding-left:${14 + d * 20}px"`;
+  let html = '';
+  for (const f of node.folders) {
+    const open = isOpen(f.path);
+    html += `<tr class="folder ${open ? 'open' : ''}" data-toggle="${esc(f.path)}">
+      <td ${pad(depth)}><div class="name-cell">${CHEVRON}${FOLDER_ICON}<span class="fname">${esc(f.name)}</span>
+        <span class="small muted">${f.files.toLocaleString()} file${f.files === 1 ? '' : 's'}</span></div></td>
+      <td><div class="agg">${minibar(f)}<span class="agg-text">${folderSummary(f)}</span></div></td>
+      <td class="num">${f.chunks ? f.chunks.toLocaleString() : ''}</td>
+      <td class="num small opt">${fmtSize(f.size)}</td>
+      <td class="small muted opt">${fmtAgo(f.updated_at)}</td>
+      <td style="text-align:right"><button class="btn small" data-reindex="${esc(f.path)}" data-count="${f.files}">Re-index</button></td></tr>`;
+    if (open) html += treeRows(f.path, depth + 1);
+  }
+  for (const f of node.files) {
+    const c = fileCells(f);
+    html += `<tr class="file">
+      <td ${pad(depth)}><div class="name-cell"><span style="width:14px"></span>${FILE_ICON}<span class="fname" title="${esc(f.path)}">${esc(f.path.slice(dir.length))}</span></div>${c.error}</td>
+      <td>${c.status}</td>
+      <td class="num">${c.chunks}</td>
+      <td class="num small opt">${c.size}</td>
+      <td class="small muted opt">${c.updated}</td>
+      <td style="white-space:nowrap; text-align:right">${c.actions}</td></tr>`;
+  }
+  if (node.totalFiles > node.files.length) {
+    html += `<tr><td colspan="6" class="small muted" ${pad(depth + 1)}>… ${(node.totalFiles - node.files.length).toLocaleString()} more files in this folder (use the path filter or List view)</td></tr>`;
+  }
+  return html;
+}
+
+function renderTree() {
+  $('#filesHead').innerHTML = '<tr><th>Name</th><th style="width:170px">Status</th><th class="num">Chunks</th><th class="num opt">Size</th><th class="opt">Updated</th><th></th></tr>';
+  const root = state.tree[''];
+  const total = root ? root.totalFiles + root.folders.reduce((n, f) => n + f.files, 0) : 0;
+  $('#filesBody').innerHTML = total ? treeRows('', 0) : emptyRow(6, total);
+  $('#filesFooter').textContent = total ? `${total.toLocaleString()} file${total === 1 ? '' : 's'}${filterActive() ? ' match the filter' : ''}` : '';
+}
+
+$('#filesBody').addEventListener('click', async (e) => {
+  const r = e.target.closest('[data-reindex]');
+  if (r) {
+    const path = r.dataset.reindex;
+    if (path.endsWith('/') && !confirm(`Re-embed all ${r.dataset.count} files in ${path}?`)) return;
+    const { queued } = await api('/files/reindex', { method: 'POST', body: { path } });
+    toast(path.endsWith('/') ? `${queued} files queued for re-indexing` : 'Queued for re-indexing');
+    loadFiles();
+    return;
+  }
+  const c = e.target.closest('[data-chunks]');
+  if (c) return showChunks(c.dataset.chunks);
+  const t = e.target.closest('[data-toggle]');
+  if (t) {
+    const dir = t.dataset.toggle;
+    const set = filterActive() ? state.collapsed : state.expanded;
+    // In filter mode the set holds collapsed folders, otherwise expanded ones.
+    set.has(dir) ? set.delete(dir) : set.add(dir);
+    if (!filterActive()) try { localStorage.setItem('ragbox.expanded', JSON.stringify([...state.expanded])); } catch {}
+    renderTree();
+    loadTree();
+  }
+});
+
+async function showChunks(path) {
+  const { chunks } = await api('/files/chunks?path=' + encodeURIComponent(path));
+  $('#chunksTitle').textContent = path;
+  $('#chunksBody').innerHTML = chunks.map((c) => `
+    <div class="result"><div class="result-head"><b>#${c.idx}</b>${c.metadata?.section ? `<span class="small muted">${esc(c.metadata.section)}</span>` : ''}<span class="small muted">${c.content.length} chars</span></div><pre>${esc(c.content)}</pre></div>`).join('') || '<div class="empty">No chunks</div>';
+  $('#chunksDialog').showModal();
+}
+
+$('#btnReindexAll').onclick = async () => {
+  if (!confirm('Re-embed every file? This can take a while for large folders.')) return;
+  const { queued } = await api('/reindex', { method: 'POST' });
+  toast(`${queued} files queued`);
+  loadFiles();
+};
+$('#btnRetryErrors').onclick = async () => {
+  const { queued } = await api('/retry-errors', { method: 'POST' });
+  toast(`${queued} files queued for retry`);
+  loadFiles();
+};
+
+// ---------- Activity ----------
+async function loadActivity() {
+  try {
+    const { entries } = await api('/activity?after=' + state.lastActivityId);
+    if (entries.length) {
+      state.lastActivityId = entries[0].id;
+      state.activity = [...entries, ...state.activity].slice(0, 500);
+      if (state.tab === 'activity') renderActivity();
+    }
+  } catch {}
+}
+function renderActivity() {
+  $('#activityLog').innerHTML = state.activity.length ? state.activity.map((e) => `
+    <div class="log-row"><span class="muted" title="${esc(e.ts)}">${new Date(e.ts).toLocaleTimeString()}</span>
+    <span class="lvl-${e.level}">${e.level}</span>
+    <span>${e.path ? `<span class="lpath">${esc(e.path)}</span> ` : ''}${esc(e.message)}</span></div>`).join('') : '<div class="empty">No activity yet</div>';
+}
+
+// ---------- Search ----------
+$('#searchForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const params = new URLSearchParams({ q: $('#searchQuery').value });
+  if ($('#searchPrefix').value) params.set('path_prefix', $('#searchPrefix').value);
+  if ($('#searchLimit').value) params.set('limit', $('#searchLimit').value);
+  const out = $('#searchResults');
+  out.innerHTML = '<div class="empty">Searching…</div>';
+  try {
+    const t0 = performance.now();
+    const { results } = await api('/search?' + params);
+    const ms = Math.round(performance.now() - t0);
+    out.innerHTML = `<div class="panel-body small muted" style="border-top:1px solid var(--border)">${results.length} results in ${ms} ms</div>` + results.map((r, i) => `
+      <div class="result">
+        <div class="result-head">
+          <b>${i + 1}.</b><span class="path">${esc(r.path)}</span>
+          ${r.section ? `<span class="small muted">› ${esc(r.section.replace(/^#+\s*/, ''))}</span>` : ''}
+          <span class="small muted" style="margin-left:auto">chunk ${r.chunk} · ${r.similarity == null ? 'keyword match' : 'similarity ' + r.similarity.toFixed(3)} · score ${r.score.toFixed(4)}</span>
+        </div>
+        <pre>${esc(r.content)}</pre>
+      </div>`).join('');
+  } catch (err) {
+    out.innerHTML = `<div class="panel-body err-msg">${esc(err.message)}</div>`;
+  }
+});
+
+// ---------- Settings ----------
+const FIELDS = [
+  { group: 'Indexing' },
+  { key: 'cooldownSeconds', label: 'Cool-down', unit: 'seconds', type: 'number', help: 'After a file changes, wait until it has been untouched for this long before re-embedding it. Avoids re-indexing on every save while you edit.' },
+  { key: 'rescanIntervalMinutes', label: 'Full rescan interval', unit: 'minutes', type: 'number', help: 'Periodic full scan that catches changes the file watcher missed. 0 disables it.' },
+  { key: 'concurrency', label: 'Parallel jobs', type: 'number', help: 'How many files are parsed and embedded at the same time.' },
+  { key: 'maxFileSizeMb', label: 'Max file size', unit: 'MB', type: 'number', step: 'any', help: 'Larger files are skipped.' },
+  { key: 'watcherBackend', label: 'Watcher backend', type: 'select', options: ['auto', 'polling'], help: 'Use polling on network shares or when changes are not picked up (uses more CPU).' },
+  { key: 'pollingIntervalMs', label: 'Polling interval', unit: 'ms', type: 'number', help: 'Only used by the polling backend.' },
+  { key: 'excludePatterns', label: 'Exclude patterns', type: 'list', help: 'Glob patterns matched against the path relative to the documents folder, one per line.' },
+  { key: 'disabledExtensions', label: 'Disabled formats', type: 'list', help: 'Extensions (e.g. .csv) or file names (e.g. Dockerfile) to ignore, one per line.' },
+  { group: 'Chunking', note: 'Changing these re-indexes every file.' },
+  { key: 'chunkSize', label: 'Chunk size', unit: 'characters', type: 'number' },
+  { key: 'chunkOverlap', label: 'Chunk overlap', unit: 'characters', type: 'number' },
+  { group: 'Embeddings', note: 'Changing provider, model or document prefix rebuilds the whole index.' },
+  { key: 'embeddingProvider', label: 'Provider', type: 'select', options: ['ollama', 'openai'], help: '"openai" works with any OpenAI-compatible /embeddings API (OpenAI, LM Studio, vLLM, LiteLLM…).' },
+  { key: 'embeddingUrl', label: 'Base URL', type: 'text', help: 'Ollama: http://host.docker.internal:11434 · OpenAI-compatible: include the version, e.g. https://api.openai.com/v1' },
+  { key: 'embeddingModel', label: 'Model', type: 'text', help: 'e.g. embeddinggemma, nomic-embed-text, bge-m3, text-embedding-3-small' },
+  { key: 'embeddingApiKey', label: 'API key', type: 'password', help: 'Sent as a Bearer token. Optional for Ollama.' },
+  { key: 'embeddingBatchSize', label: 'Batch size', type: 'number', help: 'Chunks sent per embedding request.' },
+  { key: 'documentPrefix', label: 'Document prefix', type: 'text', help: 'Prepended to every chunk before embedding. EmbeddingGemma: "title: none | text: " · nomic-embed-text: "search_document: "' },
+  { key: 'queryPrefix', label: 'Query prefix', type: 'text', help: 'Prepended to search queries. EmbeddingGemma: "task: search result | query: " · nomic-embed-text: "search_query: "' },
+  { group: 'Search' },
+  { key: 'defaultSearchLimit', label: 'Default result count', type: 'number' },
+  { key: 'hybridSearch', label: 'Hybrid search', type: 'checkbox', help: 'Combine vector similarity with keyword (full-text) matching. Helps with names, codes and identifiers.' },
+];
+
+async function loadSettings() {
+  const data = await api('/settings');
+  Object.assign(state, { settings: data.settings, defaults: data.defaults, overridden: data.overridden });
+  renderSettings();
+}
+
+function fmtValue(v) {
+  return Array.isArray(v) ? (v.length ? v.join(', ') : '(none)') : typeof v === 'string' && !v ? '(empty)' : String(v);
+}
+
+function renderSettings() {
+  const s = state.settings;
+  let html = '';
+  for (const f of FIELDS) {
+    if (f.group) {
+      html += `${html ? '</div>' : ''}<div class="settings-group"><h3>${esc(f.group)}</h3>${f.note ? `<div class="small muted">${esc(f.note)}</div>` : ''}`;
+      continue;
+    }
+    const v = s[f.key];
+    let input;
+    if (f.type === 'select') input = `<select name="${f.key}">${f.options.map((o) => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+    else if (f.type === 'list') input = `<textarea name="${f.key}" rows="${Math.min(Math.max(v.length + 1, 3), 10)}">${esc(v.join('\n'))}</textarea>`;
+    else if (f.type === 'checkbox') input = `<label style="font-weight:400"><input type="checkbox" name="${f.key}" ${v ? 'checked' : ''}> enabled</label>`;
+    else input = `<input type="${f.type}" name="${f.key}" value="${esc(v)}" ${f.step ? `step="${f.step}"` : ''} autocomplete="off">${f.unit ? ` <span class="small muted">${esc(f.unit)}</span>` : ''}`;
+    const isOverridden = state.overridden.includes(f.key);
+    const meta = isOverridden
+      ? `Default: <code>${esc(fmtValue(state.defaults[f.key]))}</code> · <a data-reset="${f.key}">reset</a>`
+      : '';
+    html += `<div class="field"><label for="${f.key}">${esc(f.label)}${f.help ? `<div class="help">${esc(f.help)}</div>` : ''}</label><div>${input}${meta ? `<div class="meta">${meta}</div>` : ''}</div></div>`;
+  }
+  $('#settingsFields').innerHTML = html + '</div>';
+}
+
+function readForm() {
+  const form = $('#settingsForm');
+  const patch = {};
+  for (const f of FIELDS) {
+    if (!f.key) continue;
+    const el = form.elements[f.key];
+    let v;
+    if (f.type === 'number') v = Number(el.value);
+    else if (f.type === 'checkbox') v = el.checked;
+    else if (f.type === 'list') v = el.value.split('\n').map((x) => x.trim()).filter(Boolean);
+    else v = el.value;
+    if (JSON.stringify(v) !== JSON.stringify(state.settings[f.key])) patch[f.key] = v;
+  }
+  return patch;
+}
+
+const REBUILD_KEYS = ['embeddingProvider', 'embeddingModel', 'documentPrefix', 'chunkSize', 'chunkOverlap'];
+async function saveSettings(patch) {
+  if (!Object.keys(patch).length) { $('#settingsMsg').textContent = 'No changes'; return; }
+  if (Object.keys(patch).some((k) => REBUILD_KEYS.includes(k)) && !confirm('These changes re-index every file. Continue?')) return;
+  try {
+    const data = await api('/settings', { method: 'PUT', body: patch });
+    Object.assign(state, { settings: data.settings, defaults: data.defaults, overridden: data.overridden });
+    renderSettings();
+    $('#settingsMsg').textContent = data.changed.length ? `Saved: ${data.changed.join(', ')}` : 'Saved';
+    toast('Settings saved');
+    loadStatus();
+  } catch (err) {
+    $('#settingsMsg').innerHTML = `<span class="err-msg">${esc(err.message)}</span>`;
+  }
+}
+$('#settingsForm').addEventListener('submit', (e) => { e.preventDefault(); saveSettings(readForm()); });
+$('#settingsFields').addEventListener('click', (e) => {
+  const r = e.target.closest('[data-reset]');
+  if (r) saveSettings({ [r.dataset.reset]: null });
+});
+$('#btnTestProvider').onclick = async () => {
+  $('#settingsMsg').textContent = 'Testing…';
+  const r = await api('/provider/check', { method: 'POST' });
+  $('#settingsMsg').innerHTML = r.ok ? `Provider OK · ${r.dims} dimensions` : `<span class="err-msg">${esc(r.error)}</span>`;
+  loadStatus();
+};
+
+// ---------- MCP ----------
+async function loadMcp() {
+  const url = new URL('mcp', location.href).href;
+  const auth = state.status_?.mcp?.authRequired;
+  $('#mcpUrl').textContent = url;
+  $('#mcpClaude').textContent = `claude mcp add --transport http ragbox ${url}` + (auth ? ' --header "Authorization: Bearer $RAGBOX_MCP_TOKEN"' : '');
+  const cfg = { mcpServers: { ragbox: { type: 'http', url, ...(auth ? { headers: { Authorization: 'Bearer <RAGBOX_MCP_TOKEN>' } } : {}) } } };
+  $('#mcpJson').textContent = JSON.stringify(cfg, null, 2);
+  $('#mcpAuthNote').textContent = auth ? 'This server requires the bearer token configured in RAGBOX_MCP_TOKEN.' : 'No authentication is configured (set RAGBOX_MCP_TOKEN to require a bearer token).';
+  const { formats, disabled } = await api('/formats');
+  $('#formats').innerHTML = formats.map((f) => `<div class="format"><b>${esc(f.label)}</b>${f.extensions.map((e) => `<span class="ext ${disabled.includes(e) ? 'off' : ''}">${esc(e)}</span>`).join('')}</div>`).join('');
+}
+
+// ---------- Polling ----------
+async function poll() {
+  await Promise.all([loadStatus(), loadActivity()]);
+  if (state.tab === 'files' && !document.hidden) loadFiles().catch(() => {});
+}
+let initial = 'files';
+try {
+  initial = localStorage.getItem('ragbox.tab') || 'files';
+  if (!document.querySelector(`#tabs button[data-tab="${initial}"]`)) initial = 'files';
+  state.view = localStorage.getItem('ragbox.view') === 'list' ? 'list' : 'tree';
+  state.expanded = new Set(JSON.parse(localStorage.getItem('ragbox.expanded') || '[]'));
+} catch {}
+renderViewToggle();
+loadStatus().then(() => setTab(initial));
+loadActivity();
+setInterval(poll, 2000);
+</script>
+</body>
+</html>

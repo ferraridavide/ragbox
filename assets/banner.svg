@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-label="ragbox: It's RAG in a box, as easy as it gets!">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f1117"/>
+      <stop offset="1" stop-color="#1c1f3d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#6366f1" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#ffffff" fill-opacity="0.06"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#818cf8"/>
+    </marker>
+    <g id="doc">
+      <path d="M0 0 H34 L48 14 V60 H0 Z" fill="#1f2433" stroke="#3a4157" stroke-width="1.5"/>
+      <path d="M34 0 V14 H48" fill="none" stroke="#3a4157" stroke-width="1.5"/>
+      <rect x="8" y="24" width="28" height="3" rx="1.5" fill="#3a4157"/>
+      <rect x="8" y="31" width="20" height="3" rx="1.5" fill="#3a4157"/>
+    </g>
+  </defs>
+
+  <rect width="1280" height="400" rx="20" fill="url(#bg)"/>
+  <rect width="1280" height="400" rx="20" fill="url(#dots)"/>
+
+  <!-- Wordmark -->
+  <g transform="translate(80 104)">
+    <rect width="68" height="54" rx="12" fill="#818cf8"/>
+    <rect x="13" y="15" width="42" height="8" rx="4" fill="#0f1117"/>
+    <rect x="13" y="31" width="26" height="8" rx="4" fill="#0f1117"/>
+  </g>
+  <text x="168" y="150" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="60" font-weight="700" fill="#ffffff" letter-spacing="-1.5">ragbox</text>
+  <text x="80" y="218" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="28" fill="#c9cde3">It's RAG in a box, as easy as it gets!</text>
+
+  <!-- Feature pills -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="15" fill="#aeb4cc" text-anchor="middle">
+    <rect x="80" y="258" width="150" height="32" rx="16" fill="#ffffff" fill-opacity="0.05" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="155" y="279">Watches a folder</text>
+    <rect x="242" y="258" width="196" height="32" rx="16" fill="#ffffff" fill-opacity="0.05" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="340" y="279">PGlite + pgvector</text>
+    <rect x="450" y="258" width="150" height="32" rx="16" fill="#ffffff" fill-opacity="0.05" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="525" y="279">MCP over HTTP</text>
+  </g>
+
+  <!-- Files going in -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="700" text-anchor="middle">
+    <g transform="translate(690 92)"><use href="#doc"/><rect x="6" y="44" width="36" height="12" rx="3" fill="#ef4444"/><text x="24" y="54" fill="#ffffff">PDF</text></g>
+    <g transform="translate(752 132)"><use href="#doc"/><rect x="4" y="44" width="40" height="12" rx="3" fill="#3b82f6"/><text x="24" y="54" fill="#ffffff">DOCX</text></g>
+    <g transform="translate(690 172)"><use href="#doc"/><rect x="4" y="44" width="40" height="12" rx="3" fill="#22c55e"/><text x="24" y="54" fill="#0f1117">XLSX</text></g>
+    <g transform="translate(752 212)"><use href="#doc"/><rect x="8" y="44" width="32" height="12" rx="3" fill="#cbd5e1"/><text x="24" y="54" fill="#0f1117">MD</text></g>
+    <g transform="translate(690 252)"><use href="#doc"/><rect x="8" y="44" width="32" height="12" rx="3" fill="#f59e0b"/><text x="24" y="54" fill="#0f1117">.PY</text></g>
+  </g>
+  <path d="M818 200 C 845 200, 850 205, 872 205" fill="none" stroke="#818cf8" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#arrow)"/>
+
+  <!-- The box -->
+  <ellipse cx="962" cy="210" rx="130" ry="120" fill="url(#glow)"/>
+  <polygon points="962,120 1046,162 962,204 878,162" fill="#a5b4fc"/>
+  <polygon points="878,162 962,204 962,300 878,258" fill="#6366f1"/>
+  <polygon points="962,204 1046,162 1046,258 962,300" fill="#4f46e5"/>
+  <polyline points="878,162 962,204 1046,162" fill="none" stroke="#c7d2fe" stroke-width="1.5" stroke-opacity="0.6"/>
+  <line x1="962" y1="204" x2="962" y2="300" stroke="#312e81" stroke-width="1.5" stroke-opacity="0.6"/>
+  <polygon points="892,186 946,213 946,224 892,197" fill="#0f1117" fill-opacity="0.85"/>
+  <polygon points="892,208 924,224 924,235 892,219" fill="#0f1117" fill-opacity="0.85"/>
+  <!-- vector dots on the right face -->
+  <g fill="#c7d2fe" fill-opacity="0.75">
+    <circle cx="984" cy="214" r="3"/><circle cx="1000" cy="206" r="3"/><circle cx="1016" cy="198" r="3"/><circle cx="1032" cy="190" r="3"/>
+    <circle cx="984" cy="232" r="3"/><circle cx="1000" cy="224" r="3" fill-opacity="0.35"/><circle cx="1016" cy="216" r="3"/><circle cx="1032" cy="208" r="3" fill-opacity="0.35"/>
+    <circle cx="984" cy="250" r="3" fill-opacity="0.35"/><circle cx="1000" cy="242" r="3"/><circle cx="1016" cy="234" r="3" fill-opacity="0.35"/><circle cx="1032" cy="226" r="3"/>
+  </g>
+
+  <!-- Search results going out -->
+  <path d="M1052 210 C 1068 210, 1070 210, 1082 210" fill="none" stroke="#818cf8" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#arrow)"/>
+  <g transform="translate(1092 138)">
+    <rect width="148" height="144" rx="12" fill="#161a26" stroke="#2f3550" stroke-width="1.5"/>
+    <text x="14" y="26" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#a5b4fc">search(…)</text>
+    <line x1="0" y1="40" x2="148" y2="40" stroke="#2f3550" stroke-width="1.5"/>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#7c84a3">
+      <rect x="14" y="56" width="80" height="6" rx="3" fill="#3a4157"/><text x="134" y="63" text-anchor="end" fill="#4ade80">.91</text>
+      <rect x="14" y="70" width="58" height="6" rx="3" fill="#2a3044"/>
+      <rect x="14" y="90" width="72" height="6" rx="3" fill="#3a4157"/><text x="134" y="97" text-anchor="end" fill="#4ade80">.84</text>
+      <rect x="14" y="104" width="50" height="6" rx="3" fill="#2a3044"/>
+      <rect x="14" y="124" width="64" height="6" rx="3" fill="#3a4157"/><text x="134" y="131" text-anchor="end" fill="#a3e635">.77</text>
+    </g>
+  </g>
+</svg>

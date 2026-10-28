@@ -1,0 +1,25 @@
+services:
+  ragbox:
+    build: .
+    image: ragbox:latest
+    restart: unless-stopped
+    ports:
+      # Bound to localhost only: the UI and MCP endpoint have no auth by default.
+      - "127.0.0.1:8080:8080"
+    volumes:
+      # The folder to index, mounted read-only.
+      - ${RAGBOX_DOCS:-./docs}:/docs:ro
+      # PGlite database (embeddings, file state, settings).
+      - ragbox-data:/data
+    environment:
+      # Initial defaults; anything changed in the web UI takes precedence.
+      RAGBOX_EMBEDDING_PROVIDER: ollama
+      RAGBOX_EMBEDDING_URL: http://host.docker.internal:11434
+      RAGBOX_EMBEDDING_MODEL: embeddinggemma-2
+      # RAGBOX_MCP_TOKEN: change-me   # require "Authorization: Bearer change-me" on /mcp
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    stop_grace_period: 30s
+
+volumes:
+  ragbox-data:
