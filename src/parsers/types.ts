@@ -18,6 +18,24 @@ export interface ParsedDocument {
    */
   structure: 'markdown' | 'plain';
   metadata: Record<string, unknown>;
+  /**
+   * Images and audio are embedded directly by a multimodal model instead of
+   * being chunked as text; each segment becomes one chunk.
+   */
+  media?: MediaSegment[];
+  /** Set when the file is valid but not worth indexing (e.g. a tiny icon). */
+  skip?: string;
+}
+
+export type MediaKind = 'image' | 'audio';
+
+export interface MediaSegment {
+  kind: MediaKind;
+  /** Bytes in a format the embedding provider decodes natively (PNG/JPEG/GIF/WebP, WAV). */
+  data: Buffer;
+  /** Text stored with the chunk and returned by search. */
+  content: string;
+  section?: string;
 }
 
 export interface Parser {

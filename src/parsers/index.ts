@@ -1,10 +1,12 @@
 import path from 'node:path';
 import type { Parser } from './types.js';
+import { audioParser } from './audio.js';
 import { codeParser } from './code.js';
 import { genericCodeParser } from './code-generic.js';
 import { csvParser } from './csv.js';
 import { docxParser } from './docx.js';
 import { htmlParser } from './html.js';
+import { imageParser } from './image.js';
 import { hujsonParser } from './hujson.js';
 import { ipynbParser } from './ipynb.js';
 import { jsonParser } from './json.js';
@@ -19,7 +21,7 @@ import { xlsxParser } from './xlsx.js';
 import { xmlParser } from './xml.js';
 import { yamlParser } from './yaml.js';
 
-export type { Parser, ParsedDocument, ParserInput } from './types.js';
+export type { MediaKind, MediaSegment, Parser, ParsedDocument, ParserInput } from './types.js';
 
 // Bump when parser output changes so existing files get re-indexed.
 export const PARSER_VERSION = 1;
@@ -43,6 +45,8 @@ export const parsers: Parser[] = [
   sqlParser,
   shellParser,
   htmlParser,
+  imageParser,
+  audioParser,
 ];
 
 const byExtension = new Map<string, Parser>();

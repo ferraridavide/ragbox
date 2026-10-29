@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     ports:
       # Bound to localhost only: the UI and MCP endpoint have no auth by default.
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${RAGBOX_HOST_PORT:-8080}:8080"
     volumes:
       # The folder to index, mounted read-only.
       - ${RAGBOX_DOCS:-./docs}:/docs:ro

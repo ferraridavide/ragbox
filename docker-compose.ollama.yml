@@ -1,0 +1,65 @@
+# ragbox plus its own Ollama container, for hosts without Ollama installed.
+# On first start the ollama-pull job downloads embeddinggemma-2 (about 1.3 GB)
+# into the ollama-models volume; ragbox starts once the download has finished.
+#
+#   RAGBOX_DOCS=/path/to/your/documents docker compose -f docker-compose.ollama.yml up -d --build
+#
+# Docker on macOS can't use the GPU, so this Ollama runs on the CPU there. A
+# native Ollama install (docker-compose.yml) is much faster on a Mac.
+services:
+  ragbox:
+    build: .
+    image: ragbox:latest
+    restart: unless-stopped
+    ports:
+      # Bound to localhost only: the UI and MCP endpoint have no auth by default.
+      - "127.0.0.1:${RAGBOX_HOST_PORT:-8080}:8080"
+    volumes:
+      # The folder to index, mounted read-only.
+      - ${RAGBOX_DOCS:-./docs}:/docs:ro
+      # PGlite database (embeddings, file state, settings).
+      - ragbox-data:/data
+    environment:
+      # Initial defaults; anything changed in the web UI takes precedence.
+      RAGBOX_EMBEDDING_PROVIDER: ollama
+      RAGBOX_EMBEDDING_URL: http://ollama:11434
+      RAGBOX_EMBEDDING_MODEL: embeddinggemma-2
+      # RAGBOX_MCP_TOKEN: change-me   # require "Authorization: Bearer change-me" on /mcp
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+    stop_grace_period: 30s
+
+  ollama:
+    image: ollama/ollama:0.40.13
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    # NVIDIA GPU on Linux (requires the NVIDIA Container Toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # One-shot job: downloads the model if it's missing or outdated, then exits.
+  ollama-pull:
+    image: ollama/ollama:0.40.13
+    entrypoint: ["ollama", "pull", "embeddinggemma-2"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  ragbox-data:
+  ollama-models:

@@ -36,6 +36,8 @@ search them through the Model Context Protocol (MCP).
 | Data | `.csv`, `.tsv`, `.json`, `.jsonc`, `.json5`, `.hujson`, `.geojson`, `.webmanifest`, `.yaml`, `.yml`, `.xml`, `.xsd`, `.xsl`, `.xslt`, `.svg`, `.plist`, `.csproj`, `.pom`, `.ipynb` |
 | Source code | `.py`, `.c`, `.h`, `.cpp`, `.cc`, `.hpp`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.java`, `.cs`, `.go`, `.rs`, `.kt`, `.kts`, `.swift`, `.scala`, `.rb`, `.php`, `.lua`, `.dart`, `.tf`, `.cue`, `.rego`, `.bzl`, `.star`, `.proto`, `.sql`, `.sh`, `.bash`, `.zsh`, `.fish`, `.ps1`, `.bat`, `.cmd`, `.jq` |
 | Files without an extension | `Dockerfile`, `Containerfile`, `Makefile`, `Tiltfile`, `BUILD`, `BUILD.bazel` |
+| Images | `.png`, `.jpg`, `.jpeg`, `.jpe`, `.jfif`, `.gif`, `.webp` |
+| Audio | `.wav`, `.wave` |
 
 MetaTrader files (`.mq4`, `.mqh`) are also supported but are disabled by
 default. You can enable or disable any file type on the **Settings** page.
@@ -45,14 +47,14 @@ documents.
 
 ## Run ragbox
 
-Before you begin, install [Docker](https://docs.docker.com/get-docker/) and
-[Ollama](https://ollama.com).
+Before you begin, install [Docker](https://docs.docker.com/get-docker/).
+[Ollama](https://ollama.com) is optional: if it isn't installed, ragbox can
+run Ollama in a container.
 
-1. Download an embedding model:
+### Use the setup script
 
-   ```bash
-   ollama pull embeddinggemma
-   ```
+The setup script asks a few questions, starts ragbox, and shows how to connect
+an MCP client. It works on macOS, Linux, and Windows Subsystem for Linux (WSL).
 
 1. Clone the repository:
 
@@ -61,14 +63,49 @@ Before you begin, install [Docker](https://docs.docker.com/get-docker/) and
    cd ragbox
    ```
 
-1. Start ragbox. Replace `/path/to/your/documents` with the folder that you
-   want to index:
+1. Run the setup script:
 
    ```bash
-   RAGBOX_DOCS=/path/to/your/documents docker compose up -d --build
+   ./run.sh
    ```
 
-1. Open <http://localhost:8080> to see the indexing progress.
+   Follow the wizard. It asks which folder to index, starts ragbox, and
+   returns the MCP endpoint to add to your client.
+
+On macOS, Docker containers can't use the GPU, so Ollama in a container is
+much slower than a native installation. For faster indexing on a Mac, install
+Ollama before you run the script.
+
+### Use Docker Compose
+
+To start ragbox without the setup script, choose the Compose file that fits
+your setup. Replace `/path/to/your/documents` with the folder that you want
+to index.
+
+- If Ollama is installed on your computer, download the embedding model and
+  start ragbox:
+
+  ```bash
+  ollama pull embeddinggemma-2
+  RAGBOX_DOCS=/path/to/your/documents docker compose up -d --build
+  ```
+
+- If Ollama isn't installed, start ragbox together with an Ollama container.
+  The container downloads `embeddinggemma-2` on first start:
+
+  ```bash
+  RAGBOX_DOCS=/path/to/your/documents docker compose -f docker-compose.ollama.yml up -d --build
+  ```
+
+  To use an NVIDIA GPU on Linux, uncomment the `deploy` section in
+  `docker-compose.ollama.yml`.
+
+Open <http://localhost:8080> to see the indexing progress. To use a different
+port, set `RAGBOX_HOST_PORT`, for example `RAGBOX_HOST_PORT=9090`.
+
+`embeddinggemma-2` also embeds images and audio. For details, see
+[Images and audio](#images-and-audio). To use a different model, change
+`RAGBOX_EMBEDDING_MODEL` in the Compose file.
 
 ## Connect an MCP client
 
@@ -128,6 +165,9 @@ If you change the embedding model, ragbox rebuilds the index.
 - Run only one ragbox container for each data volume.
 - On Linux, the container runs as user ID 1000. That user must be able to read
   the mounted folder.
+- On Linux, a native Ollama installation listens only on `127.0.0.1` by
+  default, so the ragbox container can't reach it. Set `OLLAMA_HOST=0.0.0.0`
+  for the Ollama service, or use `docker-compose.ollama.yml`.
 
 ## Development
 

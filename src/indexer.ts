@@ -3,20 +3,24 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chunkMarkdown, chunkText, type Chunk } from './chunker.js';
 import { chunksTableExists, getDb, getMeta, recreateChunksTable, setMeta, toVectorLiteral } from './db.js';
-import { embed, EmbeddingError, probe } from './embedder.js';
+import { embed, EmbeddingError, probe, type EmbeddingInput, type Modality } from './embedder.js';
 import { isEligible, removeFile, requeue, toAbsolute, type FileRow } from './files.js';
 import { errorMessage, log } from './log.js';
-import { PARSER_VERSION, parserFor } from './parsers/index.js';
+import { PARSER_VERSION, parserFor, type MediaSegment } from './parsers/index.js';
 import { CHUNKING_KEYS, EMBEDDING_KEYS, getSettings, type SettingKey, type Settings } from './settings.js';
 
 const TICK_MS = 1000;
 const PROVIDER_RETRY_MS = 15_000;
 const EMBED_RETRY_SECONDS = 30;
 const INSERT_BATCH = 100;
+// Upper bound on the media bytes sent in one embedding request.
+const MEDIA_BATCH_BYTES = 8 * 1024 * 1024;
 
 export interface ProviderStatus {
   ok: boolean;
   dims?: number;
+  /** Input types the model accepts; media files are skipped when theirs is missing. */
+  modalities?: Modality[];
   error?: string;
   checkedAt?: string;
 }
@@ -95,8 +99,8 @@ export class Indexer {
   /** Probes the provider right away (used by the UI "Test" button). */
   async checkProvider(): Promise<ProviderStatus> {
     try {
-      const dims = await probe(getSettings());
-      this.provider = { ok: true, dims, checkedAt: new Date().toISOString() };
+      const { dims, modalities } = await probe(getSettings());
+      this.provider = { ok: true, dims, modalities, checkedAt: new Date().toISOString() };
       if (this.embeddingDims && dims !== this.embeddingDims) {
         log.warn(`Embedding dimension changed from ${this.embeddingDims} to ${dims}: index will be rebuilt`);
         this.ready = false;
@@ -258,19 +262,31 @@ export class Indexer {
       const parser = parserFor(job.path, s.disabledExtensions)!;
       const name = path.posix.basename(job.path);
       const parsed = await parser.parse({ buffer, path: job.path, name, ext: path.extname(name).toLowerCase() });
-      const text = parsed.text.replace(/\u0000/g, '');
-      if (!text.trim()) {
-        await this.finish(job, { status: 'skipped', error: 'No extractable text', size: stat.size, mtimeMs: stat.mtimeMs, parser: parser.id, metadata: parsed.metadata });
-        return;
+      const skip = (error: string) =>
+        this.finish(job, { status: 'skipped', error, size: stat.size, mtimeMs: stat.mtimeMs, parser: parser.id, metadata: parsed.metadata });
+      if (parsed.skip) return await skip(parsed.skip);
+      const media = parsed.media;
+      const unsupported = media?.find((m) => !this.provider.modalities?.includes(m.kind));
+      if (unsupported) {
+        return await skip(`The embedding model ${s.embeddingModel} does not accept ${unsupported.kind === 'image' ? 'images' : 'audio'}`);
       }
+      const text = parsed.text.replace(/\u0000/g, '');
+      if (!media && !text.trim()) return await skip('No extractable text');
 
-      const chunks = parsed.structure === 'markdown' ? chunkMarkdown(text, s) : chunkText(text, s);
       const title = parsed.title || name;
-      const inputs = chunks.map((c) => embeddingInput(s, job.path, title, c));
+      let chunks: Chunk[];
+      let inputs: EmbeddingInput[];
+      if (media) {
+        chunks = media.map((m, index) => ({ index, content: m.content, section: m.section }));
+        inputs = media.map((m) => mediaInput(s, job.path, m));
+      } else {
+        chunks = parsed.structure === 'markdown' ? chunkMarkdown(text, s) : chunkText(text, s);
+        inputs = chunks.map((c) => embeddingInput(s, job.path, title, c));
+      }
       const vectors: number[][] = [];
-      for (let i = 0; i < inputs.length; i += s.embeddingBatchSize) {
+      for (const batch of batches(inputs, s.embeddingBatchSize)) {
         if (gen !== this.indexGen) return; // Index was reset: requeue handled by the reset.
-        vectors.push(...(await embed(inputs.slice(i, i + s.embeddingBatchSize), s)));
+        vectors.push(...(await embed(batch, s)));
       }
 
       await db.transaction(async (tx) => {
@@ -347,6 +363,28 @@ function embeddingInput(s: Settings, filePath: string, title: string, chunk: Chu
   if (title && title !== path.posix.basename(filePath)) header.push(`Title: ${title}`);
   if (chunk.section && !chunk.content.startsWith(chunk.section)) header.push(`Section: ${chunk.section.replace(/^#+\s*/, '')}`);
   return `${s.documentPrefix}${header.join('\n')}\n\n${chunk.content}`;
+}
+
+/** Image or audio sent to a multimodal model, with the file path as text context. */
+function mediaInput(s: Settings, filePath: string, m: MediaSegment): EmbeddingInput {
+  return { text: `${s.documentPrefix}File: ${filePath}`, [m.kind]: m.data.toString('base64') };
+}
+
+/** Splits inputs into requests of at most `size` items and, for media, about MEDIA_BATCH_BYTES. */
+function* batches(inputs: EmbeddingInput[], size: number): Generator<EmbeddingInput[]> {
+  let batch: EmbeddingInput[] = [];
+  let bytes = 0;
+  for (const input of inputs) {
+    const inputBytes = typeof input === 'string' ? 0 : (input.image?.length ?? 0) + (input.audio?.length ?? 0);
+    if (batch.length && (batch.length >= size || bytes + inputBytes > MEDIA_BATCH_BYTES)) {
+      yield batch;
+      batch = [];
+      bytes = 0;
+    }
+    batch.push(input);
+    bytes += inputBytes;
+  }
+  if (batch.length) yield batch;
 }
 
 export const indexer = new Indexer();

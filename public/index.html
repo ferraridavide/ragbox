@@ -389,7 +389,7 @@ async function loadStatus() {
     const s = await api('/status');
     state.status_ = s;
     const p = s.provider;
-    setPill('#pillProvider', p.ok ? 'ok' : 'err', `${p.model}${p.ok ? ` · ${p.dims}d` : ' · unavailable'}`, p.ok ? `${p.kind} at ${p.url}` : p.error);
+    setPill('#pillProvider', p.ok ? 'ok' : 'err', `${p.model}${p.ok ? ` · ${p.dims}d` : ' · unavailable'}`, p.ok ? `${p.kind} at ${p.url} · accepts ${(p.modalities ?? ['text']).join(', ')}` : p.error);
     const w = s.watcher;
     setPill('#pillWatcher', w.error ? 'warn' : w.running ? 'ok' : 'err', w.running ? `Watching (${w.backend})` : 'Watcher stopped', w.error || '');
     const k = s.worker;
@@ -833,7 +833,7 @@ $('#settingsFields').addEventListener('click', (e) => {
 $('#btnTestProvider').onclick = async () => {
   $('#settingsMsg').textContent = 'Testing…';
   const r = await api('/provider/check', { method: 'POST' });
-  $('#settingsMsg').innerHTML = r.ok ? `Provider OK · ${r.dims} dimensions` : `<span class="err-msg">${esc(r.error)}</span>`;
+  $('#settingsMsg').innerHTML = r.ok ? `Provider OK · ${r.dims} dimensions · accepts ${(r.modalities ?? ['text']).join(', ')}` : `<span class="err-msg">${esc(r.error)}</span>`;
   loadStatus();
 };
 

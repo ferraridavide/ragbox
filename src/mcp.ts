@@ -17,7 +17,9 @@ function buildServer(): McpServer {
       title: 'Search documents',
       description:
         'Semantic + keyword search over the local document collection indexed by ragbox. ' +
-        'Returns the most relevant text passages with their file path. Phrase the query as a natural-language question or topic.',
+        'Returns the most relevant text passages with their file path. Images and audio recordings (when the embedding model supports them) ' +
+        'are matched by their content and returned as a reference with the file path and, for audio, the time range. ' +
+        'Phrase the query as a natural-language question or topic.',
       inputSchema: {
         query: z.string().min(1).describe('What to search for'),
         limit: z.number().int().min(1).max(50).optional().describe('Maximum number of passages to return (default 8)'),
